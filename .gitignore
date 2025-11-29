@@ -3,3 +3,5 @@ src/generated/
 secret/
 data/
 *.log
+*.avro
+*.avro.zst

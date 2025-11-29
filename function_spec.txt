@@ -1,0 +1,3 @@
+name, template:${name()}
+email, template:${random_string([5, 8])}@test.com
+age, template:${random([18, 90])}

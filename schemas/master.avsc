@@ -1,0 +1,56 @@
+{
+  "type": "record",
+  "name": "Master",
+  "namespace": "com.example",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    },
+    {
+      "name": "id1",
+      "type": "string"
+    },
+    {
+      "name": "id2",
+      "type": "string"
+    },
+    {
+      "name": "id3",
+      "type": "string"
+    },
+    {
+      "name": "id4",
+      "type": "string"
+    },
+    {
+      "name": "id5",
+      "type": "string"
+    },
+    {
+      "name": "id6",
+      "type": "string"
+    },
+    {
+      "name": "id7",
+      "type": "string"
+    },
+    {
+      "name": "id8",
+      "type": "string"
+    },
+    {
+      "name": "id9",
+      "type": "string"
+    },
+    {
+      "name": "id10",
+      "type": "string"
+    },
+    {
+      "name": "value_master",
+      "type": "string"
+    } 
+  ]
+}
+

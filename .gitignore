@@ -1,0 +1,5 @@
+/target
+src/generated/
+secret/
+data/
+*.log

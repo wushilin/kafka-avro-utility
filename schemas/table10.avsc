@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "Table10",
+  "namespace": "com.example",
+  "fields": [
+    {
+      "name": "id10",
+      "type": "string"
+    },
+    {
+      "name": "value10",
+      "type": "string"
+    } 
+  ]
+}
+

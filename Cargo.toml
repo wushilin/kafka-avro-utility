@@ -1,0 +1,44 @@
+[package]
+name = "kafka-avro-utility"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Confluent Kafka client (rdkafka)
+rdkafka = { version = "0.38", features = ["cmake-build", "ssl-vendored"] }
+
+# Tokio async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Avro support with Confluent Schema Registry
+schema_registry_converter = { version = "4.6", features = ["avro", "blocking"] }
+
+# HTTP client for Schema Registry (used for disabling certificate verification)
+reqwest = { version = "0.12", features = ["blocking", "rustls-tls"] }
+
+# Apache Avro library (must match schema_registry_converter version)
+apache-avro = "0.20"
+
+# Java properties file parser
+java-properties = "2"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Random number generation
+rand = "0.9"
+
+# Statistics tracking
+dashmap = "5"
+chrono = "0.4.42"
+governor = "0.10.2"
+futures = "0.3"
+
+# JSON serialization for Schema Registry API
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+precise_rate_limiter = "0.3.0"
+rquickjs = { version = "0.10.0", features = ["full"] }
+uuid = { version = "1.18.1", features = ["v4"] }
+zstd = "0.13.3"
+humansize = "2.1.3"

@@ -1,0 +1,34 @@
+age,template:${range([18, 60])}
+email,template:user-${seq(100)}@test.com
+timestamp,template:date-is-${date("%Y-%m-%d %H:%M:%S")}-haha
+host,template:host-${range([1000, 2000])}.abc.com
+name,template:${name()}
+eventCode,template:EVENT-${range([100, 1000])}
+ts1,template:${range([1609459205550, 1609459205551])}
+ts2,template:${range([1609459200, 1609459203])}
+source,template:ip-is-${ipaddr(4)}
+source_ip,template:ip6-is-${ipaddr(6)}
+now_ms,template:now-is-${now_ms()}
+now_micro, template:now-is-${now_micros()}
+now_millis, template:now-is-${now_millis()}
+id,template:id-${seq(1)}x
+id1,template:id1-${seq(1)}x
+id2,template:id2-${seq(1)}x
+id3,template:id3-${seq(1)}x
+id4,template:id4-${seq(1)}x
+id5,template:id5-${seq(1)}x
+id6,template:id6-${seq(1)}x
+id7,template:id7-${seq(1)}x
+id8,template:id8-${seq(1)}x
+id9,template:id9-${seq(1)}x
+id10,template:id10-${seq(1)}x
+multi,template:user-${seq(5)}@example${range([1, 5])}.com
+invoke_test,template:${invokejs(["test1", "test", 7])}
+invoke_test2,template:${invokejs(["test1", "test", 7])}
+
+--------------------------
+var global_counter=0;
+function test1(a, b) {
+    global_counter = global_counter + 1;
+    return "" + global_counter + " hello world from js " + a + "," + b;
+}

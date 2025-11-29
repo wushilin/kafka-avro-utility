@@ -1,0 +1,31 @@
+intField,template:${range([1, 100])}
+longField,template:${range([1000, 2000])}
+stringField,template:str-${random_string([5, 10])}
+tsMillisField,template:${now_ms()}
+doubleField,template:${random_float([0.0, 1.0])}
+floatField,template:${random_float([0.0, 1.0])}
+uuidField,template:${uuid()}
+dateField,template:${date_int()}
+bytesField,template:${bytes([5])}
+fixedField,template:${fixed([4])}
+unionField,template:${random_string([7,7])}
+complexUnionField,template:${choice(["123", "999", "true", "false", "hello", "world"])}
+enumField,template:${choice(["A", "B", "C"])}
+nestedString,template:nested-${random_string([5, 5])}
+nestedInt,template:${range([100, 200])}
+deepField,template:deep-${seq(1)}
+timeMillisField,template:${range([0, 86400000])}
+timeMicrosField,template:${range([0, 86400000000])}
+tsMicrosField,template:${now_micros()}
+nameField,template:${name()}
+addressField,template:${address()}
+dateStringField,template:${date("%Y-%m-%d")}
+ipField,template:${ipaddr(4)}
+choiceWeightField,template:${choice_weight([1, "Rare", 9, "Common"])}
+invokeField,template:${invokejs(["greet", "User"])}
+formattedIntField,template:${formatted(["{:04}", 1, 100])}
+formattedFloatField,template:${formatted(["{:0.4}", 0.0, 1.0])}
+--------------------------
+function greet(name) {
+    return "Hello, " + name + " from JS!";
+}

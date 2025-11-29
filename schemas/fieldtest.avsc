@@ -1,0 +1,73 @@
+{
+  "type": "record",
+  "name": "FieldTest",
+  "fields": [
+    {"name": "booleanField", "type": "boolean"},
+    {"name": "intField", "type": "int"},
+    {"name": "longField", "type": "long"},
+    {"name": "floatField", "type": "float"},
+    {"name": "doubleField", "type": "double"},
+    {"name": "bytesField", "type": "bytes"},
+    {"name": "stringField", "type": "string"},
+    {"name": "enumField", "type": {"type": "enum", "name": "TestEnum", "symbols": ["A", "B", "C"]}},
+    {"name": "arrayField", "type": {"type": "array", "items": "string"}},
+    {"name": "mapField", "type": {"type": "map", "values": "int"}},
+    {"name": "unionField", "type": ["null", "string"]},
+    {"name": "complexUnionField", "type": ["null", "int", "boolean", "string"]},
+    {"name": "fixedField", "type": {"type": "fixed", "name": "TestFixed", "size": 4}},
+    {"name": "dateField", "type": {"type": "int", "logicalType": "date"}},
+    {"name": "tsMillisField", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "uuidField", "type": {"type": "string", "logicalType": "uuid"}},
+    {"name": "timeMillisField", "type": {"type": "int", "logicalType": "time-millis"}},
+    {"name": "timeMicrosField", "type": {"type": "long", "logicalType": "time-micros"}},
+    {"name": "tsMicrosField", "type": {"type": "long", "logicalType": "timestamp-micros"}},
+    {"name": "durationField", "type": {"type": "fixed", "name": "duration", "size": 12, "logicalType": "duration"}},
+    {"name": "nameField", "type": "string"},
+    {"name": "addressField", "type": "string"},
+    {"name": "dateStringField", "type": "string"},
+    {"name": "ipField", "type": "string"},
+    {"name": "choiceWeightField", "type": "string"},
+    {"name": "invokeField", "type": "string"},
+    {"name": "formattedIntField", "type": "string"},
+    {"name": "formattedFloatField", "type": "string"},
+    {
+      "name": "nestedRecord",
+      "type": {
+        "type": "record",
+        "name": "Nested",
+        "fields": [
+          {"name": "nestedString", "type": "string"},
+          {"name": "nestedInt", "type": "int"}
+        ]
+      }
+    },
+    {
+      "name": "tripleNestedRecord",
+      "type": {
+        "type": "record",
+        "name": "Level1",
+        "fields": [
+          {
+            "name": "level2Record",
+            "type": {
+              "type": "record",
+              "name": "Level2",
+              "fields": [
+                {
+                  "name": "level3Record",
+                  "type": {
+                    "type": "record",
+                    "name": "Level3",
+                    "fields": [
+                      {"name": "deepField", "type": "string"}
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

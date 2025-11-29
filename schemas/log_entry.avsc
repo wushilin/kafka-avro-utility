@@ -1,0 +1,29 @@
+{
+  "type": "record",
+  "name": "LogEntry",
+  "namespace": "com.example",
+  "fields": [
+    {
+      "name": "eventCode",
+      "type": "string"
+    },
+    {
+      "name": "message",
+      "type": ["null", "string"],
+      "default": null
+    },
+    {
+      "name": "timestamp",
+      "type": "string"
+    },
+    {
+      "name": "host",
+      "type": "string"
+    },
+    {
+      "name": "source_ip",
+      "type": "string"
+    }
+  ]
+}
+

@@ -1,3 +1,44 @@
-name, template:${name()}
-email, template:${random_string([5, 8])}@test.com
-age, template:${random([18, 90])}
+adcode, template:${choice(["ad_native", "ad_h5"])}
+dvcmodel, template:${range([2020,2025])}${choice(["TV", "PAD"])}${choice([55,65,75,85,95,105])}${choice(["GT", "GTR", "TI", "BQS", "DELUX"])}
+dvcmodel2, template:${range([2020,2025])}${choice(["TV", "PAD"])}${choice([55,65,75,85,95,105])}${choice(["GT", "GTR", "TI", "BQS", "DELUX"])}
+dvcmodel3, template:${range([2020,2025])}${choice(["TV", "PAD"])}${choice([55,65,75,85,95,105])}${choice(["GT", "GTR", "TI", "BQS", "DELUX"])}
+dvcmodel4, template:${range([2020,2025])}${choice(["TV", "PAD"])}${choice([55,65,75,85,95,105])}${choice(["GT", "GTR", "TI", "BQS", "DELUX"])}
+dvcmodel5, template:${range([2020,2025])}${choice(["TV", "PAD"])}${choice([55,65,75,85,95,105])}${choice(["GT", "GTR", "TI", "BQS", "DELUX"])}
+dvcmodel6, template:${range([2020,2025])}${choice(["TV", "PAD"])}${choice([55,65,75,85,95,105])}${choice(["GT", "GTR", "TI", "BQS", "DELUX"])}
+adid, template:${formatted(["{:05}", 1, 99999])}
+capabilitycode, template:${range([2025010100, 2025013199])}
+cc, template:${choice(["USA", "AUS", "SGT", "GER", "INR"])}
+cid, template:${formatted(["{:04}", 1, 9999])}
+citycode, template:${formatted(["{:05}", 1, 99999])}
+clientid, template:${formatted(["{:09}", 1, 999999999])}
+clientsection, template:os_t.xtzttt.2.6.${range([1,9])}
+crid, template:${range([1, 256])}
+csp, template:${choice_weight([10, "xxxx", 1, "yyy"])}
+customerid, template:${range([1,29999999])}
+deviceid, template:${formatted(["{:09}", 1, 999999999])}${formatted(["{:09}", 1, 999999999])}${random_string([20,20])}
+devmodel, template:${choice_weight([10, "xxx", 1, "yyy"])}${formatted(["{:03}", 1, 9999])}DEVTOOL
+dvcctycode, template:${formatted(["{:05}", 1, 99999])}
+dvclangcode, template:${choice_weight([6, "eng", 1, "chi", 2, "jap", 1, "esp"])}
+dvcosver, template:U09.${formatted(["{:03}", 1, 999])}
+event, template:vwbimpmrc${formatted(["{:03}", 1, 999])}
+eventCode, template:27${formatted(["{:04}", 1, 999])}
+eventMessage, template:tracking
+eventPos, template:${formatted(["{:03}", 1, 999])}
+eventType, template:${formatted(["{:03}", 1, 999])}
+featurecode, template:${formatted(["{:09}", 1, 999999999])}${formatted(["{:09}", 1, 999999999])}
+fluentd_uid, template:fluentdIdSysLogAd
+hasvideo, template:${choice_weight([95, "1", 5, "0"])}
+impid, template:launcher_waterfall_${formatted(["{:03}", 1, 999])}
+out_appbundle, template:${choice_weight([70, "com.xxxx.ui.launcher", 30, "mobile.com.ui.launcher"])}
+out_appname, template:${choice(["TV Launcher", "BOX Launcher"])}
+out_cb, template:${uuid()}
+out_cc, template:${choice(["USA", "JP", "SG", "DEU", "IND"])}
+out_demandpartnerpath, template:99999
+out_resptime, template:${now_s()}
+roleid, template:-1
+serverName, template:vadserver
+source, template:${choice(["Native edge", "EMEA Hub", "Latam HUB", "GCN Hub"])}
+statecode, template:${choice_weight([94, "GA", 5,"BETA", 1, "ALPHA"])}
+tagid, template:sliderbanner${formatted(["{:02}", 0, 99])}
+time, template:${now_s()}
+videoduration, template:${formatted(["{:03}", 1,999])}.${formatted(["{:03}", 1,999])}

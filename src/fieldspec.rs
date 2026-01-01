@@ -653,6 +653,19 @@ impl TemplateToken for NowMs {
 }
 
 #[derive(Debug, Clone)]
+pub struct NowS;
+
+impl TemplateToken for NowS {
+    fn to_token(&self) -> String {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        now.to_string()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct NowMicros;
 
 impl TemplateToken for NowMicros {
@@ -988,6 +1001,7 @@ pub enum Placeholder {
     DateRange(DateRange),
     // New optimized functions
     NowMs(NowMs),
+    NowS(NowS),
     NowMicros(NowMicros),
     NowNanos(NowNanos),
     Name(Name),
@@ -1015,6 +1029,7 @@ impl TemplateToken for Placeholder {
             Placeholder::RangeFloat(r) => r.to_token(),
             Placeholder::RangeString(r) => r.to_token(),
             Placeholder::DateRange(dr) => dr.to_token(),
+            Placeholder::NowS(n) => n.to_token(),
             Placeholder::NowMs(n) => n.to_token(),
             Placeholder::NowMicros(n) => n.to_token(),
             Placeholder::NowNanos(n) => n.to_token(),
@@ -1447,6 +1462,7 @@ impl FieldSpec {
                 }
                 None
             }
+            "now_s" => Some(Placeholder::NowS(NowS)),
             "now_millis" | "now_ms" => Some(Placeholder::NowMs(NowMs)),
             "now_micros" => Some(Placeholder::NowMicros(NowMicros)),
             "now_nanos" => Some(Placeholder::NowNanos(NowNanos)),

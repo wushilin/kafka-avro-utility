@@ -5,3 +5,4 @@ data/
 *.log
 *.avro
 *.avro.zst
+local/

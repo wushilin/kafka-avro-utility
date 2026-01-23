@@ -6,7 +6,9 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
+use std::sync::Mutex;
 
+use chrono::{Datelike, Local, Timelike};
 use rquickjs::{Context, Ctx, Function, Result as JsResult, Runtime, Value as JsValue};
 use serde_json::Value;
 use uuid::Uuid;
@@ -497,6 +499,179 @@ thread_local! {
     static JS_ENGINE: RefCell<Option<(Arc<String>, Runtime, Context)>> = RefCell::new(None);
 }
 
+fn parse_weight_expr(v: &Value) -> Option<WeightExpr> {
+    // Number -> literal
+    if let Some(u) = v.as_u64() {
+        return if u > 0 {
+            Some(WeightExpr {
+                factors: vec![WeightFactor::Literal(u)],
+            })
+        } else {
+            None
+        };
+    }
+    if let Some(i) = v.as_i64() {
+        return if i > 0 {
+            Some(WeightExpr {
+                factors: vec![WeightFactor::Literal(i as u64)],
+            })
+        } else {
+            None
+        };
+    }
+    if let Some(f) = v.as_f64() {
+        return if f > 0.0 {
+            Some(WeightExpr {
+                factors: vec![WeightFactor::Literal(f as u64)],
+            })
+        } else {
+            None
+        };
+    }
+
+    let s = v.as_str()?;
+    let tokens: Vec<&str> = s
+        .split(|c| c == 'x' || c == '*' || c == ' ' || c == '\t')
+        .filter(|t| !t.is_empty())
+        .collect();
+    if tokens.is_empty() {
+        return None;
+    }
+
+    let mut factors = Vec::new();
+    for t in tokens {
+        let lower = t.to_ascii_lowercase();
+        if let Ok(n) = lower.parse::<u64>() {
+            if n == 0 {
+                return None;
+            }
+            factors.push(WeightFactor::Literal(n));
+            continue;
+        }
+        let tf = match lower.as_str() {
+            "year" => TimeField::Year,
+            "month" => TimeField::Month,
+            "day" => TimeField::Day,
+            "hour" => TimeField::Hour,
+            "minute" => TimeField::Minute,
+            "second" => TimeField::Second,
+            "millisecond" | "ms" => TimeField::Millisecond,
+            _ => return None,
+        };
+        factors.push(WeightFactor::Time(tf));
+    }
+
+    if factors.is_empty() {
+        None
+    } else {
+        Some(WeightExpr { factors })
+    }
+}
+
+fn parse_choice_weight(arg: &Value) -> Option<Placeholder> {
+    if let Some(arr) = arg.as_array() {
+        if arr.len() >= 2 && arr.len() % 2 == 0 {
+            let mut choices = Vec::new();
+            let mut weight_exprs = Vec::new();
+
+            for i in (0..arr.len()).step_by(2) {
+                if i + 1 >= arr.len() {
+                    break;
+                }
+
+                let expr = parse_weight_expr(&arr[i])?;
+                if expr.eval() == 0 {
+                    continue;
+                }
+
+                let choice_str = match &arr[i + 1] {
+                    Value::String(s) => s.clone(),
+                    Value::Number(n) => n.to_string(),
+                    Value::Bool(b) => b.to_string(),
+                    Value::Null => "null".to_string(),
+                    _ => serde_json::to_string(&arr[i + 1]).ok()?,
+                };
+
+                weight_exprs.push(expr);
+                choices.push(choice_str);
+            }
+
+            let cw = ChoiceWeight {
+                choices,
+                weight_exprs,
+            };
+            if cw.validate() {
+                return Some(Placeholder::ChoiceWeight(cw));
+            }
+        }
+    }
+    None
+}
+
+fn parse_delta_range(v: &Value) -> Option<(i64, i64)> {
+    // number -> single delta
+    if let Some(u) = v.as_i64() {
+        let d = u.abs().max(1);
+        return Some((d, d));
+    }
+    if let Some(f) = v.as_f64() {
+        let d = f.abs().round() as i64;
+        let d = d.max(1);
+        return Some((d, d));
+    }
+    let s = v.as_str()?;
+    let parts: Vec<&str> = s
+        .split("to")
+        .flat_map(|p| p.split('-'))
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let a = parts[0].parse::<i64>().ok()?;
+    let b = parts[1].parse::<i64>().ok()?;
+    let d1 = a.abs().max(1);
+    let d2 = b.abs().max(1);
+    let lo = d1.min(d2);
+    let hi = d1.max(d2);
+    Some((lo, hi))
+}
+
+fn parse_fluctuate(_name: &str, arg: &Value) -> Option<Placeholder> {
+    if let Some(arr) = arg.as_array() {
+        if arr.len() == 4 {
+            let min = arr[0].as_i64().unwrap_or(0);
+            let max = arr[1].as_i64().unwrap_or(0);
+            let (delta_min, delta_max) = parse_delta_range(&arr[2])?;
+            let unit_str = arr[3].as_str()?;
+
+            let unit = match unit_str.to_ascii_lowercase().as_str() {
+                "second" | "seconds" => FluctUnit::Second,
+                "minute" | "minutes" => FluctUnit::Minute,
+                "hour" | "hours" => FluctUnit::Hour,
+                "day" | "days" => FluctUnit::Day,
+                _ => return None,
+            };
+
+            let key = unit_str.to_string();
+
+            let f = Fluctuate {
+                min,
+                max,
+                delta_min,
+                delta_max,
+                unit,
+                key,
+                state: Arc::new(Mutex::new(None)),
+            };
+            if min <= max {
+                return Some(Placeholder::Fluctuate(f));
+            }
+        }
+    }
+    None
+}
 // Optimized function argument structs
 
 pub trait Validatable {
@@ -512,25 +687,175 @@ pub trait TemplateToken {
 #[derive(Debug, Clone)]
 pub struct ChoiceWeight {
     pub choices: Vec<String>,
-    pub cumulative_weights: Vec<u64>,
-    pub total_weight: u64,
+    pub weight_exprs: Vec<WeightExpr>,
+}
+
+#[derive(Debug, Clone)]
+pub enum WeightFactor {
+    Literal(u64),
+    Time(TimeField),
+}
+
+#[derive(Debug, Clone)]
+pub enum TimeField {
+    Year,
+    Month,
+    Day,
+    Hour,
+    Minute,
+    Second,
+    Millisecond,
+}
+
+#[derive(Debug, Clone)]
+pub struct WeightExpr {
+    pub factors: Vec<WeightFactor>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Fluctuate {
+    pub min: i64,
+    pub max: i64,
+    pub delta_min: i64,
+    pub delta_max: i64,
+    pub unit: FluctUnit,
+    pub key: String,
+    pub state: Arc<Mutex<Option<(String, i64, bool)>>>, // bucket, value, direction_up
+}
+
+#[derive(Debug, Clone)]
+pub enum FluctUnit {
+    Second,
+    Minute,
+    Hour,
+    Day,
 }
 
 impl Validatable for ChoiceWeight {
     fn validate(&self) -> bool {
-        !self.choices.is_empty() && self.total_weight > 0
+        !self.choices.is_empty() && !self.weight_exprs.is_empty()
     }
 }
 
 impl TemplateToken for ChoiceWeight {
     fn to_token(&self) -> String {
-        let random_weight = rand::random_range(1..=self.total_weight);
-        let idx = self
-            .cumulative_weights
+        // Evaluate weights at call time to allow dynamic/time-based expressions
+        let mut cumulative = Vec::with_capacity(self.weight_exprs.len());
+        let mut total = 0u64;
+        for expr in &self.weight_exprs {
+            let w = expr.eval();
+            if w == 0 {
+                continue;
+            }
+            total = total.saturating_add(w);
+            cumulative.push(total);
+        }
+        if total == 0 || cumulative.is_empty() {
+            return self.choices.first().cloned().unwrap_or_default();
+        }
+        let random_weight = rand::random_range(1..=total);
+        let idx = cumulative
             .iter()
-            .position(|&cumulative| random_weight <= cumulative)
-            .unwrap_or(self.choices.len() - 1);
+            .position(|&c| random_weight <= c)
+            .unwrap_or(cumulative.len() - 1);
         self.choices[idx].clone()
+    }
+}
+
+impl TemplateToken for Fluctuate {
+    fn to_token(&self) -> String {
+        let bucket = current_bucket(self.unit.clone());
+        let min = self.min;
+        let max = self.max;
+        let delta_min = self.delta_min;
+        let delta_max = self.delta_max;
+
+        let mut state = self.state.lock().unwrap();
+        let entry = state
+            .get_or_insert_with(|| (bucket.clone(), rand::random_range(min..=max), true));
+
+        // If still in the same bucket, keep previous value and direction
+        if entry.0 == bucket {
+            return entry.1.to_string();
+        }
+
+        // Bucket changed: optionally flip direction (rare) before stepping
+        if entry.1 > min && entry.1 < max && rand::random_bool(0.10) {
+            entry.2 = !entry.2;
+        }
+
+        entry.1 =
+            next_fluct_value_wave(entry.1, min, max, delta_min, delta_max, &mut entry.2);
+        entry.0 = bucket;
+        entry.1.to_string()
+    }
+}
+
+fn current_bucket(unit: FluctUnit) -> String {
+    let now = Local::now();
+    match unit {
+        FluctUnit::Second => now.format("%Y-%m-%d-%H-%M-%S").to_string(),
+        FluctUnit::Minute => now.format("%Y-%m-%d-%H-%M").to_string(),
+        FluctUnit::Hour => now.format("%Y-%m-%d-%H").to_string(),
+        FluctUnit::Day => now.format("%Y-%m-%d").to_string(),
+    }
+}
+
+fn next_fluct_value_wave(
+    prev: i64,
+    min: i64,
+    max: i64,
+    delta_min: i64,
+    delta_max: i64,
+    dir_up: &mut bool,
+) -> i64 {
+    if min >= max {
+        return min;
+    }
+    let delta_min = delta_min.abs().max(1);
+    let delta_max = delta_max.abs().max(delta_min);
+    let delta = rand::random_range(delta_min..=delta_max);
+
+    // single-step movement in the chosen direction
+    let target = if *dir_up {
+        (prev + delta).clamp(min, max)
+    } else {
+        (prev - delta).clamp(min, max)
+    };
+
+    // flip if hit bounds
+    if target >= max {
+        *dir_up = false;
+    } else if target <= min {
+        *dir_up = true;
+    }
+
+    target
+}
+
+impl WeightExpr {
+    pub fn eval(&self) -> u64 {
+        let now = chrono::Local::now();
+        let mut acc: u64 = 1;
+        for f in &self.factors {
+            let val = match f {
+                WeightFactor::Literal(v) => *v,
+                WeightFactor::Time(tf) => match tf {
+                    TimeField::Year => now.year() as u64,
+                    TimeField::Month => now.month() as u64,
+                    TimeField::Day => now.day() as u64,
+                    TimeField::Hour => now.hour() as u64,
+                    TimeField::Minute => now.minute() as u64,
+                    TimeField::Second => now.second() as u64,
+                    TimeField::Millisecond => (now.timestamp_millis() % 1000) as u64,
+                },
+            };
+            if val == 0 {
+                return 0;
+            }
+            acc = acc.saturating_mul(val);
+        }
+        acc
     }
 }
 
@@ -995,6 +1320,7 @@ pub enum Placeholder {
     // Optimized functions
     Choice(Choice),
     ChoiceWeight(ChoiceWeight),
+    Fluctuate(Fluctuate),
     Range(Range),
     RangeFloat(RangeFloat),
     RangeString(RangeString),
@@ -1025,6 +1351,7 @@ impl TemplateToken for Placeholder {
             Placeholder::Sequence(s) => s.to_token(),
             Placeholder::Choice(c) => c.to_token(),
             Placeholder::ChoiceWeight(cw) => cw.to_token(),
+            Placeholder::Fluctuate(f) => f.to_token(),
             Placeholder::Range(r) => r.to_token(),
             Placeholder::RangeFloat(r) => r.to_token(),
             Placeholder::RangeString(r) => r.to_token(),
@@ -1330,53 +1657,8 @@ impl FieldSpec {
                 }
                 None
             }
-            "choice_weight" => {
-                if let Some(arr) = arg.as_array() {
-                    if arr.len() >= 2 && arr.len() % 2 == 0 {
-                        let mut choices = Vec::new();
-                        let mut cumulative_weights = Vec::new();
-                        let mut total_weight = 0u64;
-
-                        for i in (0..arr.len()).step_by(2) {
-                            if i + 1 >= arr.len() {
-                                break;
-                            }
-
-                            let weight = if let Some(w) = arr[i].as_u64() {
-                                w.max(1)
-                            } else if let Some(w) = arr[i].as_i64() {
-                                w.max(1) as u64
-                            } else if let Some(w) = arr[i].as_f64() {
-                                w.max(1.0) as u64
-                            } else {
-                                continue;
-                            };
-
-                            let choice_str = match &arr[i + 1] {
-                                Value::String(s) => s.clone(),
-                                Value::Number(n) => n.to_string(),
-                                Value::Bool(b) => b.to_string(),
-                                Value::Null => "null".to_string(),
-                                _ => serde_json::to_string(&arr[i + 1]).ok()?,
-                            };
-
-                            total_weight += weight;
-                            cumulative_weights.push(total_weight);
-                            choices.push(choice_str);
-                        }
-
-                        let cw = ChoiceWeight {
-                            choices,
-                            cumulative_weights,
-                            total_weight,
-                        };
-                        if cw.validate() {
-                            return Some(Placeholder::ChoiceWeight(cw));
-                        }
-                    }
-                }
-                None
-            }
+            "choice_weight" => parse_choice_weight(arg),
+            "fluctuate" => parse_fluctuate(name, arg),
             "range" | "random" => {
                 if let Some(arr) = arg.as_array() {
                     if arr.len() == 2 {

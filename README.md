@@ -137,7 +137,7 @@ stringField,template:str-${random_string([5, 10])}
 | `random_float([min, max])` | Random float between `min` and `max`. | `${random_float([0.0, 1.0])}` |
 | `random_string([min, max])` | Random alphanumeric string with length between `min` and `max`. | `${random_string([5, 10])}` |
 | `choice(["val1", "val2"])` | Randomly select one value from the list. | `${choice(["active", "inactive"])}` |
-| `choice_weight([w1, "v1", w2, "v2"])` | Weighted random selection. | `${choice_weight([10, "Rare", 90, "Common"])}` |
+| `choice_weight([w1, "v1", w2, "v2"])` | Weighted random selection. Weights are evaluated on each generation and can include time factors (`year`, `month`, `day`, `hour`, `minute`, `second`, `millisecond`). | `${choice_weight([10, "Rare", 90, "Common"])}` |
 | `uuid()` | Generate a random UUID v4. | `${uuid()}` |
 | `name()` | Generate a random full name. | `${name()}` |
 | `address()` | Generate a random realistic address. | `${address()}` |
@@ -152,6 +152,7 @@ stringField,template:str-${random_string([5, 10])}
 | `now_nanos()` | Current timestamp in nanoseconds. | `${now_nanos()}` |
 | `formatted(["fmt", min, max])` | Generate a formatted number (int or float) within range. | `${formatted(["{:04}", 1, 100])}` |
 | `invokejs(["func", arg1, ...])` | Invoke a custom JavaScript function defined in the file. | `${invokejs(["myFunc", "arg1"])}` |
+| `fluctuate([min, max, step, "unit"])` | Wave-like value that moves up/down each bucket. `step` can be a number or a string range like `"1 to 3"` (inclusive). `unit` is `second|minute|hour|day`. Direction flips at bounds and has a small random flip on bucket change. One value is held constant per bucket. | `${fluctuate([1, 20, "1 to 3", "second"])}` |
 
 ### JavaScript Scripting
 

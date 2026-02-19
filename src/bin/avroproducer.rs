@@ -1,5 +1,6 @@
 use clap::Parser;
 use precise_rate_limiter::FastQuotaSync;
+use rdkafka::message::{Header, OwnedHeaders};
 use rdkafka::producer::{BaseRecord, Producer, ThreadedProducer};
 use rdkafka::util::Timeout;
 use kafka_avro_utility::avrogen::generate_random_record;
@@ -9,6 +10,7 @@ use kafka_avro_utility::fieldspec::FieldSpec;
 use apache_avro as avro;
 use std::sync::Arc;
 use std::fs;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -47,6 +49,10 @@ struct Args {
     /// Production speed limit in MiB/s. When not specified, no limit is applied.
     #[arg(long)]
     speed: Option<f64>,
+
+    /// Kafka header in NAME=VALUE format. Can be provided multiple times.
+    #[arg(short = 'H', long = "header")]
+    headers: Vec<String>,
 }
 
 struct ProducerContext {
@@ -79,6 +85,7 @@ impl rdkafka::producer::ProducerContext for ProducerContext {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    let headers = parse_headers(&args.headers)?;
 
     // Enforce mutually exclusive input options
     match (&args.in_file, &args.schema) {
@@ -141,6 +148,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &subject,
             &sr_url,
             auth_info.as_deref(),
+            &headers,
             rate_limiter.as_ref(),
             &mut count,
             &mut total_bytes,
@@ -153,6 +161,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &subject,
             &sr_url,
             auth_info.as_deref(),
+            &headers,
             rate_limiter.as_ref(),
             &mut count,
             &mut total_bytes,
@@ -265,6 +274,27 @@ fn register_schema(
     Ok(register_response.id)
 }
 
+fn parse_headers(raw_headers: &[String]) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    let mut seen = HashSet::new();
+    let mut parsed = Vec::with_capacity(raw_headers.len());
+
+    for h in raw_headers {
+        let (name, value) = h
+            .split_once('=')
+            .ok_or_else(|| format!("Invalid header '{}': expected NAME=VALUE", h))?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("Header name must not be empty".into());
+        }
+        if !seen.insert(name.to_string()) {
+            return Err(format!("Duplicate header name '{}'", name).into());
+        }
+        parsed.push((name.to_string(), value.to_string()));
+    }
+
+    Ok(parsed)
+}
+
 fn run_file_mode(
     in_file: &PathBuf,
     args: &Args,
@@ -272,6 +302,7 @@ fn run_file_mode(
     subject: &str,
     sr_url: &str,
     auth_info: Option<&str>,
+    headers: &[(String, String)],
     rate_limiter: Option<&Arc<FastQuotaSync>>,
     count: &mut u64,
     total_bytes: &mut u64,
@@ -338,6 +369,7 @@ fn run_file_mode(
                     producer,
                     &args.topic,
                     bytes_raw,
+                    headers,
                     payload_size,
                     count,
                     total_bytes,
@@ -360,6 +392,7 @@ fn run_generate_mode(
     subject: &str,
     sr_url: &str,
     auth_info: Option<&str>,
+    headers: &[(String, String)],
     rate_limiter: Option<&Arc<FastQuotaSync>>,
     count: &mut u64,
     total_bytes: &mut u64,
@@ -441,6 +474,7 @@ fn run_generate_mode(
             producer,
             &args.topic,
             payload,
+            headers,
             payload_size,
             count,
             total_bytes,
@@ -455,12 +489,23 @@ fn produce_payload(
     producer: &ThreadedProducer<ProducerContext>,
     topic: &str,
     bytes_raw: Vec<u8>,
+    headers: &[(String, String)],
     payload_size: u64,
     count: &mut u64,
     total_bytes: &mut u64,
     start_time: std::time::Instant,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut record: BaseRecord<(), Vec<u8>, ()> = BaseRecord::to(topic).payload(&bytes_raw);
+    let mut record: BaseRecord<(), Vec<u8>> = BaseRecord::to(topic).payload(&bytes_raw);
+    if !headers.is_empty() {
+        let mut owned_headers = OwnedHeaders::new();
+        for (k, v) in headers {
+            owned_headers = owned_headers.insert(Header {
+                key: k.as_str(),
+                value: Some(v.as_str()),
+            });
+        }
+        record = record.headers(owned_headers);
+    }
 
     // Retry loop for handling QueueFull errors with timeout
     let retry_start = std::time::Instant::now();

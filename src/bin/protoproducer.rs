@@ -1,9 +1,11 @@
 use clap::Parser;
 use precise_rate_limiter::FastQuotaSync;
+use rdkafka::message::{Header, OwnedHeaders};
 use rdkafka::producer::{BaseRecord, Producer, ThreadedProducer};
 use rdkafka::util::Timeout;
 use kafka_avro_utility::fastprotofile::load_bytes_file;
 use kafka_avro_utility::kafka_config::KafkaConfig;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -39,10 +41,15 @@ struct Args {
     /// Production speed limit in MiB/s. When not specified, no limit is applied.
     #[arg(long)]
     speed: Option<f64>,
+
+    /// Kafka header in NAME=VALUE format. Can be provided multiple times.
+    #[arg(short = 'H', long = "header")]
+    headers: Vec<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    let headers = parse_headers(&args.headers)?;
 
     // Load Kafka configuration
     let kafka_config = KafkaConfig::from_file(&args.client_config)?;
@@ -188,7 +195,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 const MAX_RETRIES: u32 = 100;
 
                 loop {
-                    let record_copy: BaseRecord<(), [u8], ()> = BaseRecord::to(&args.topic).payload(&bytes_raw);
+                    let mut record_copy: BaseRecord<(), [u8], ()> =
+                        BaseRecord::to(&args.topic).payload(&bytes_raw);
+                    if !headers.is_empty() {
+                        let mut owned_headers = OwnedHeaders::new();
+                        for (k, v) in &headers {
+                            owned_headers = owned_headers.insert(Header {
+                                key: k.as_str(),
+                                value: Some(v.as_str()),
+                            });
+                        }
+                        record_copy = record_copy.headers(owned_headers);
+                    }
                     match producer.send(record_copy) {
                          Ok(_) => {
                             count += 1;
@@ -333,5 +351,26 @@ fn humanize_bytes(bytes: u64) -> String {
         unit_idx += 1;
     }
     format!("{:.2} {}", size, UNITS[unit_idx])
+}
+
+fn parse_headers(raw_headers: &[String]) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    let mut seen = HashSet::new();
+    let mut parsed = Vec::with_capacity(raw_headers.len());
+
+    for h in raw_headers {
+        let (name, value) = h
+            .split_once('=')
+            .ok_or_else(|| format!("Invalid header '{}': expected NAME=VALUE", h))?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("Header name must not be empty".into());
+        }
+        if !seen.insert(name.to_string()) {
+            return Err(format!("Duplicate header name '{}'", name).into());
+        }
+        parsed.push((name.to_string(), value.to_string()));
+    }
+
+    Ok(parsed)
 }
 

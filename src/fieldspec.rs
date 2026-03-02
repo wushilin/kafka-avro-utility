@@ -1111,6 +1111,42 @@ impl TemplateToken for Sequence {
 }
 
 #[derive(Debug, Clone)]
+pub struct SequenceCycle {
+    pub start: i64,
+    pub end: i64,
+    pub step: i64,
+    pub current: Arc<AtomicI64>,
+}
+
+impl Validatable for SequenceCycle {
+    fn validate(&self) -> bool {
+        self.start <= self.end && self.step > 0
+    }
+}
+
+impl TemplateToken for SequenceCycle {
+    fn to_token(&self) -> String {
+        loop {
+            let old = self.current.load(std::sync::atomic::Ordering::Relaxed);
+            let next = old.saturating_add(self.step);
+            let wrapped = if next > self.end { self.start } else { next };
+            if self
+                .current
+                .compare_exchange(
+                    old,
+                    wrapped,
+                    std::sync::atomic::Ordering::Relaxed,
+                    std::sync::atomic::Ordering::Relaxed,
+                )
+                .is_ok()
+            {
+                return old.to_string();
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct UuidGen;
 
 impl TemplateToken for UuidGen {
@@ -1317,6 +1353,7 @@ impl TemplateToken for GenericFunction {
 #[derive(Debug, Clone)]
 pub enum Placeholder {
     Sequence(Sequence),
+    SequenceCycle(SequenceCycle),
     // Optimized functions
     Choice(Choice),
     ChoiceWeight(ChoiceWeight),
@@ -1349,6 +1386,7 @@ impl TemplateToken for Placeholder {
     fn to_token(&self) -> String {
         match self {
             Placeholder::Sequence(s) => s.to_token(),
+            Placeholder::SequenceCycle(s) => s.to_token(),
             Placeholder::Choice(c) => c.to_token(),
             Placeholder::ChoiceWeight(cw) => cw.to_token(),
             Placeholder::Fluctuate(f) => f.to_token(),
@@ -1653,6 +1691,25 @@ impl FieldSpec {
                     let choice = Choice { choices };
                     if choice.validate() {
                         return Some(Placeholder::Choice(choice));
+                    }
+                }
+                None
+            }
+            "sequence" => {
+                if let Some(arr) = arg.as_array() {
+                    if arr.len() == 3 {
+                        let start = arr[0].as_i64()?;
+                        let end = arr[1].as_i64()?;
+                        let step = arr[2].as_i64()?;
+                        let seq = SequenceCycle {
+                            start,
+                            end,
+                            step,
+                            current: Arc::new(AtomicI64::new(start)),
+                        };
+                        if seq.validate() {
+                            return Some(Placeholder::SequenceCycle(seq));
+                        }
                     }
                 }
                 None

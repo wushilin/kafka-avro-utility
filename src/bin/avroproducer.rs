@@ -47,8 +47,12 @@ struct Args {
     num_messages: Option<u64>,
 
     /// Production speed limit in MiB/s. When not specified, no limit is applied.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "speed_m")]
     speed: Option<f64>,
+
+    /// Production speed limit in messages per second.
+    #[arg(long = "speed-m", conflicts_with = "speed")]
+    speed_m: Option<f64>,
 
     /// Kafka header in NAME=VALUE format. Can be provided multiple times.
     #[arg(short = 'H', long = "header")]
@@ -139,6 +143,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let refill_amount = bytes_per_sec / 10; // 10 refills per second
         FastQuotaSync::new(bytes_per_sec, refill_amount, refill_interval)
     });
+    let message_rate_limiter: Option<Arc<FastQuotaSync>> = args.speed_m.map(|msg_per_sec| {
+        let msg_per_sec = msg_per_sec.max(1.0) as usize;
+        println!(
+            "Message rate limiting enabled: {:.2} msg/s",
+            msg_per_sec as f64
+        );
+        let refill_interval = Duration::from_millis(100);
+        let refill_amount = (msg_per_sec / 10).max(1);
+        FastQuotaSync::new(msg_per_sec, refill_amount, refill_interval)
+    });
 
     if let Some(in_file) = &args.in_file {
         run_file_mode(
@@ -150,6 +164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             auth_info.as_deref(),
             &headers,
             rate_limiter.as_ref(),
+            message_rate_limiter.as_ref(),
             &mut count,
             &mut total_bytes,
             start_time,
@@ -163,6 +178,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             auth_info.as_deref(),
             &headers,
             rate_limiter.as_ref(),
+            message_rate_limiter.as_ref(),
             &mut count,
             &mut total_bytes,
             start_time,
@@ -304,6 +320,7 @@ fn run_file_mode(
     auth_info: Option<&str>,
     headers: &[(String, String)],
     rate_limiter: Option<&Arc<FastQuotaSync>>,
+    message_rate_limiter: Option<&Arc<FastQuotaSync>>,
     count: &mut u64,
     total_bytes: &mut u64,
     start_time: std::time::Instant,
@@ -371,6 +388,7 @@ fn run_file_mode(
                     bytes_raw,
                     headers,
                     payload_size,
+                    message_rate_limiter,
                     count,
                     total_bytes,
                     start_time,
@@ -394,6 +412,7 @@ fn run_generate_mode(
     auth_info: Option<&str>,
     headers: &[(String, String)],
     rate_limiter: Option<&Arc<FastQuotaSync>>,
+    message_rate_limiter: Option<&Arc<FastQuotaSync>>,
     count: &mut u64,
     total_bytes: &mut u64,
     start_time: std::time::Instant,
@@ -421,9 +440,13 @@ fn run_generate_mode(
         schema_id, subject
     );
 
-    let to_generate = args.num_messages.unwrap_or(100);
+    loop {
+        if let Some(limit) = args.num_messages {
+            if *count >= limit {
+                break;
+            }
+        }
 
-    for _ in 0..to_generate {
         // Periodically check for field_spec updates (at most once per second)
         if Instant::now() >= next_check {
             if let Ok(md) = fs::metadata(&args.field_spec) {
@@ -476,6 +499,7 @@ fn run_generate_mode(
             payload,
             headers,
             payload_size,
+            message_rate_limiter,
             count,
             total_bytes,
             start_time,
@@ -491,10 +515,15 @@ fn produce_payload(
     bytes_raw: Vec<u8>,
     headers: &[(String, String)],
     payload_size: u64,
+    message_rate_limiter: Option<&Arc<FastQuotaSync>>,
     count: &mut u64,
     total_bytes: &mut u64,
     start_time: std::time::Instant,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(limiter) = message_rate_limiter {
+        limiter.acquire(1);
+    }
+
     let mut record: BaseRecord<(), Vec<u8>> = BaseRecord::to(topic).payload(&bytes_raw);
     if !headers.is_empty() {
         let mut owned_headers = OwnedHeaders::new();

@@ -101,6 +101,8 @@ field_name, template:${function(args)} constant_text ${other_function()}
 ```text
 # Sequence that starts with 1 and increments by 1 each call
 id, template:${seq(1)}
+# Cyclic sequence: 0..1000 step 1, then wraps to 0
+cycle_id, template:${sequence([0, 1000, 1])}
 # UUID generation
 user_id, template:${uuid()}
 # Random name generation
@@ -133,6 +135,7 @@ stringField,template:str-${random_string([5, 10])}
 
 | Function | Description | Example |
 | `seq(start)` | Thread-safe incremental counter starting from `start`. | `${seq(1)}` |
+| `sequence([start, end, step])` | Cyclic sequence state machine. Emits current value, increments by `step`, and wraps to `start` when next value exceeds `end`. | `${sequence([0, 1000, 1])}` |
 | `range([min, max])` | Random integer between `min` and `max` (inclusive). | `${range([1, 100])}` |
 | `random_float([min, max])` | Random float between `min` and `max`. | `${random_float([0.0, 1.0])}` |
 | `random_string([min, max])` | Random alphanumeric string with length between `min` and `max`. | `${random_string([5, 10])}` |

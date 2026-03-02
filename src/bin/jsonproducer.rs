@@ -30,8 +30,12 @@ struct Args {
     num_messages: Option<u64>,
 
     /// Production speed limit in MiB/s. When not specified, no limit is applied.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "speed_m")]
     speed: Option<f64>,
+
+    /// Production speed limit in messages per second.
+    #[arg(long = "speed-m", conflicts_with = "speed")]
+    speed_m: Option<f64>,
 
     /// Kafka header in NAME=VALUE format. Can be provided multiple times.
     #[arg(short = 'H', long = "header")]
@@ -101,6 +105,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let refill_amount = bytes_per_sec / 10; // 10 refills per second
         FastQuotaSync::new(bytes_per_sec, refill_amount, refill_interval)
     });
+    let message_rate_limiter = args.speed_m.map(|msg_per_sec| {
+        let msg_per_sec = msg_per_sec.max(1.0) as usize;
+        println!(
+            "Message rate limiting enabled: {:.2} msg/s",
+            msg_per_sec as f64
+        );
+        let refill_interval = Duration::from_millis(100);
+        let refill_amount = (msg_per_sec / 10).max(1);
+        FastQuotaSync::new(msg_per_sec, refill_amount, refill_interval)
+    });
 
     // Reuse payload buffer to avoid allocations
     loop {
@@ -143,6 +157,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Apply rate limiting if enabled
                 if let Some(ref limiter) = rate_limiter {
                     limiter.acquire(bytes_raw.len());
+                }
+                if let Some(ref limiter) = message_rate_limiter {
+                    limiter.acquire(1);
                 }
 
                 let retry_start = std::time::Instant::now();

@@ -1,11 +1,53 @@
 # Field Spec Configuration
 
-The field spec file allows you to control how field values are generated in your Avro records. By default, the producer uses `field_spec.txt`, but you can specify a different file using the `--field-spec` argument.
+The field spec file controls how field values are generated across the project tools. By default, the generators use `field_spec.txt`, but you can specify a different file using the `--field-spec` argument.
 
 ## Usage
 
 ```bash
-rust-avro-producer --field-spec field_spec.txt
+./target/release/kafka-avro-utility --field-spec field_spec.txt
+./target/release/avrogen --field-spec field_spec.txt
+./target/release/csvgen --schema schema.txt --field-spec field_spec.txt
+```
+
+## CSV Generation
+
+`csvgen` uses a very simple schema file format: one non-empty line containing comma-separated column names.
+
+Example `schema.txt`:
+
+```text
+id,name,notes
+```
+
+Each column listed in the schema must have a matching entry in the field spec file:
+
+```text
+id,template:${seq(1)}
+name,template:${name()}
+notes,template:hello, world
+```
+
+`csvgen` writes quoted CSV when needed:
+
+- Plain values like `15` are emitted without quotes.
+- Values containing commas, quotes, newlines, or leading/trailing whitespace are quoted and escaped.
+- By default, `csvgen` emits data rows only. Use `--add-header` to include the schema header row.
+- `--threads` controls the number of generator threads, defaulting to `5`, and `--batch` controls how many rows each thread sends per handoff to the printer thread, defaulting to `10000`.
+- `csvgen` uses a single printer thread with a channel buffer size of `1`, so generation can stay only one batch ahead of printing.
+- `--rows-per-second` and `--mbytes-per-second` are optional. If both are set, `csvgen` applies both limits and the stricter one wins.
+- With `--threads > 1`, row order is not guaranteed.
+
+Example:
+
+```bash
+./target/release/csvgen \
+  --schema schema.txt \
+  --field-spec field_spec.txt \
+  --num-rows 3 \
+  --threads 5 \
+  --batch 10000 \
+  --add-header
 ```
 
 ## File Format

@@ -52,9 +52,7 @@ struct RateLimit {
 }
 
 struct BatchPayload {
-    data: String,
-    row_count: usize,
-    byte_count: usize,
+    rows: Vec<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -94,11 +92,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         while let Ok(batch_result) = rx.recv() {
             let batch = batch_result?;
-            acquire_units(&row_rate_limiter, batch.row_count);
-            acquire_units(&byte_rate_limiter, batch.byte_count);
-            writer
-                .write_all(batch.data.as_bytes())
-                .map_err(|e| format!("failed to write batch: {e}"))?;
+            for row in batch.rows {
+                writer
+                    .write_all(row.as_bytes())
+                    .map_err(|e| format!("failed to write row: {e}"))?;
+                acquire_units(&row_rate_limiter, 1);
+                acquire_units(&byte_rate_limiter, row.len());
+            }
         }
 
         writer
@@ -124,7 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let end = (start + batch_size).min(total_rows);
                 let row_count = end - start;
-                let mut data = String::new();
+                let mut rows = Vec::with_capacity(row_count);
 
                 for _ in 0..row_count {
                     let row = match columns
@@ -138,16 +138,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             return Ok(());
                         }
                     };
-                    data.push_str(&render_csv_row(row.iter().map(String::as_str)));
+                    rows.push(render_csv_row(row.iter().map(String::as_str)));
                 }
 
-                let byte_count = data.len();
-                tx.send(Ok(BatchPayload {
-                    data,
-                    row_count,
-                    byte_count,
-                }))
-                .map_err(|e| format!("failed to send batch to printer: {e}"))?;
+                tx.send(Ok(BatchPayload { rows }))
+                    .map_err(|e| format!("failed to send batch to printer: {e}"))?;
             }
 
             Ok(())
